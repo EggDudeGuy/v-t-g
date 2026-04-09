@@ -139,10 +139,18 @@ async function convert(){
 }
 
 function downloadGIF(){
-  const a=document.createElement('a');
-  a.href=gifURL;
-  a.download='converted.gif';
+  if(!gifURL){
+    alert('No GIF to download yet');
+    return;
+  }
+
+  const a = document.createElement('a');
+  a.href = gifURL;
+  a.download = 'converted.gif';
+
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
 }
 </script>
 </body>
