@@ -4,11 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MP4 to GIF Converter</title>
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js">});
-</script>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
   <style>
     body { font-family: Arial; display:flex; justify-content:center; align-items:center; height:100vh; background:#f5f5f5; }
-    .container { background:white; padding:20px; border-radius:12px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:340px; text-align:center; }
+    .container { background:white; padding:20px; border-radius:12px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:360px; text-align:center; }
     button { margin-top:10px; padding:10px; border:none; border-radius:8px; background:black; color:white; width:100%; cursor:pointer; }
     input, label { margin-top:10px; width:100%; }
     video, img { margin-top:10px; width:100%; border-radius:8px; }
@@ -24,7 +23,7 @@
 
   <video id="preview" controls></video>
 
-  <label>Start Time</label>
+  <label>Start Time (sec)</label>
   <input type="range" id="start" min="0" value="0" step="0.1" />
 
   <label>Duration (sec)</label>
@@ -33,13 +32,13 @@
   <label>FPS</label>
   <input type="range" id="fps" min="5" max="20" value="10" />
 
-  <label>Resolution</label>
+  <label>Resolution (width)</label>
   <input type="range" id="resolution" min="160" max="640" step="40" value="320" />
 
   <p id="estimate">Estimated size: -</p>
 
-  <button onclick="convert()">Convert</button>
-  <button id="downloadBtn" style="display:none;" onclick="downloadGIF()">Download</button>
+  <button id="convertBtn">Convert</button>
+  <button id="downloadBtn" style="display:none;">Download GIF</button>
 
   <div class="progress-bar"><div class="progress" id="progress"></div></div>
 
@@ -48,125 +47,108 @@
 </div>
 
 <script>
-// Wait until page fully loads
 window.addEventListener('DOMContentLoaded', () => {
-const { createFFmpeg, fetchFile } = FFmpeg;
-const ffmpeg = createFFmpeg({ log:true });
 
-// Better progress handling
-ffmpeg.setLogger(({ message }) => {
-  const progressEl = document.getElementById('progress');
-  const match = message.match(/time=([0-9:.]+)/);
-  if (match) {
-    progressEl.style.width = Math.min(progressEl.offsetWidth + 5, 100) + '%';
-  }
-});
-let gifURL=null;
-let videoFile=null;
+  const { createFFmpeg, fetchFile } = FFmpeg;
+  const ffmpeg = createFFmpeg({ log: true });
 
-const preview = document.getElementById('preview');
-const startSlider = document.getElementById('start');
-const durationInput = document.getElementById('duration');
-const fpsInput = document.getElementById('fps');
-const resInput = document.getElementById('resolution');
-
-// Load video preview
-document.getElementById('upload').addEventListener('change', (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  videoFile = file;
-  preview.src = URL.createObjectURL(file);
-  preview.onloadedmetadata = ()=>{
-    startSlider.max = preview.duration;
-  };
-  updateEstimate();
-});
-
-// Scrubber
-startSlider.addEventListener('input', ()=>{
-  preview.currentTime = startSlider.value;
-  updateEstimate();
-});
-
-// Estimate size (rough heuristic)
-function updateEstimate(){
-  const duration = durationInput.value;
-  const fps = fpsInput.value;
-  const res = resInput.value;
-
-  // rough formula: frames * pixels * compression factor
-  const frames = duration * fps;
-  const pixels = res * res * 0.6; // approximate aspect ratio
-  const bytes = frames * pixels * 0.07;
-
-  const kb = bytes / 1024;
-  const mb = kb / 1024;
-
-  document.getElementById('estimate').textContent =
-    mb > 1 ? `Estimated size: ${mb.toFixed(2)} MB` : `Estimated size: ${kb.toFixed(0)} KB`;
-}
-
-[fpsInput, resInput, durationInput].forEach(el=>{
-  el.addEventListener('input', updateEstimate);
-});
-
-// Progress
-// Removed unreliable setProgress; using logger-based progress instead
-
-async function convert(){
-  try {
+  const upload = document.getElementById('upload');
+  const preview = document.getElementById('preview');
+  const start = document.getElementById('start');
+  const duration = document.getElementById('duration');
+  const fps = document.getElementById('fps');
+  const res = document.getElementById('resolution');
   const status = document.getElementById('status');
-  const start = startSlider.value;
-  const duration = durationInput.value;
-  const fps = fpsInput.value;
-  const res = resInput.value;
+  const progress = document.getElementById('progress');
+  const estimate = document.getElementById('estimate');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const convertBtn = document.getElementById('convertBtn');
 
-  if(!videoFile){ alert('Upload a file'); return; }
+  let file = null;
+  let gifURL = null;
 
-  if(!ffmpeg.isLoaded()){
-    status.textContent='Loading...';
-    await ffmpeg.load();
+  function updateEstimate() {
+    const frames = duration.value * fps.value;
+    const pixels = res.value * res.value;
+    const bytes = frames * pixels * 0.00007;
+    const mb = bytes / (1024 * 1024);
+    estimate.textContent = `Estimated size: ${mb.toFixed(2)} MB`;
   }
 
-  ffmpeg.FS('writeFile','input.mp4', await fetchFile(videoFile));
+  upload.addEventListener('change', (e) => {
+    file = e.target.files[0];
+    if (!file) return;
 
-  status.textContent='Converting...';
-  document.getElementById('progress').style.width='0%';
+    preview.src = URL.createObjectURL(file);
 
-  await ffmpeg.run(
-    '-ss', String(start),
-    '-t', String(duration),
-    '-i','input.mp4',
-    '-vf', `fps=${fps},scale=${res}:-1:flags=lanczos`,
-    'out.gif'
-  );
+    preview.onloadedmetadata = () => {
+      start.max = preview.duration;
+    };
+  });
 
-  const data = ffmpeg.FS('readFile','out.gif');
-  gifURL = URL.createObjectURL(new Blob([data.buffer],{type:'image/gif'}));
+  start.addEventListener('input', () => {
+    preview.currentTime = start.value;
+  });
 
-  document.getElementById('output').src = gifURL;
-  document.getElementById('downloadBtn').style.display='block';
-  status.textContent='Done';
-  } catch (err) {
-    console.error(err);
-    document.getElementById('status').textContent = 'Error: ' + err.message;
-  }
-}
+  [duration, fps, res].forEach(el => el.addEventListener('input', updateEstimate));
 
-function downloadGIF(){
-  if(!gifURL){
-    alert('No GIF to download yet');
-    return;
-  }
+  ffmpeg.setProgress(({ ratio }) => {
+    progress.style.width = `${Math.floor(ratio * 100)}%`;
+  });
 
-  const a = document.createElement('a');
-  a.href = gifURL;
-  a.download = 'converted.gif';
+  convertBtn.addEventListener('click', async () => {
+    try {
+      if (!file) {
+        alert('Upload a video first');
+        return;
+      }
 
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
+      status.textContent = 'Loading FFmpeg...';
+
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
+
+      ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
+
+      status.textContent = 'Converting...';
+      progress.style.width = '0%';
+
+      await ffmpeg.run(
+        '-ss', String(start.value),
+        '-t', String(duration.value),
+        '-i', 'input.mp4',
+        '-vf', `fps=${fps.value},scale=${res.value}:-1:flags=lanczos`,
+        'out.gif'
+      );
+
+      const data = ffmpeg.FS('readFile', 'out.gif');
+      gifURL = URL.createObjectURL(new Blob([data.buffer], { type: 'image/gif' }));
+
+      document.getElementById('output').src = gifURL;
+      downloadBtn.style.display = 'block';
+
+      status.textContent = 'Done';
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Error: ' + err.message;
+    }
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!gifURL) return;
+
+    const a = document.createElement('a');
+    a.href = gifURL;
+    a.download = 'converted.gif';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  updateEstimate();
+
+});
 </script>
 </body>
 </html>
