@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MP4 to GIF Converter</title>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 320px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      background: black;
+      color: white;
+      cursor: pointer;
+      width: 100%;
+    }
+    input, label {
+      margin-top: 10px;
+      width: 100%;
+    }
+    img {
+      margin-top: 15px;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>MP4 to GIF Converter</h2>
+
+    <input type="file" id="upload" accept="video/mp4" />
+
+    <label>Start Time (seconds)</label>
+    <input type="number" id="start" value="0" min="0" />
+
+    <label>Duration (seconds)</label>
+    <input type="number" id="duration" value="5" min="1" />
+
+    <label>Quality (FPS: 5–20)</label>
+    <input type="range" id="fps" min="5" max="20" value="10" />
+
+    <button onclick="convert()">Convert to GIF</button>
+    <button id="downloadBtn" style="display:none;" onclick="downloadGIF()">Download GIF</button>
+
+    <p id="status"></p>
+    <img id="output" />
+  </div>
+
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+    let gifURL = null;
+
+    async function convert() {
+      const fileInput = document.getElementById('upload');
+      const status = document.getElementById('status');
+      const output = document.getElementById('output');
+      const start = document.getElementById('start').value;
+      const duration = document.getElementById('duration').value;
+      const fps = document.getElementById('fps').value;
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      if (!fileInput.files.length) {
+        alert('Please upload an MP4 file');
+        return;
+      }
+
+      status.textContent = 'Loading FFmpeg...';
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
+
+      const file = fileInput.files[0];
+      ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
+
+      status.textContent = 'Converting...';
+
+      await ffmpeg.run(
+        '-ss', String(start),
+        '-t', String(duration),
+        '-i', 'input.mp4',
+        '-vf', `fps=${fps},scale=320:-1:flags=lanczos`,
+        'output.gif'
+      );
+
+      const data = ffmpeg.FS('readFile', 'output.gif');
+      gifURL = URL.createObjectURL(new Blob([data.buffer], { type: 'image/gif' }));
+
+      output.src = gifURL;
+      downloadBtn.style.display = 'block';
+      status.textContent = 'Done!';
+    }
+
+    function downloadGIF() {
+      const a = document.createElement('a');
+      a.href = gifURL;
+      a.download = 'converted.gif';
+      a.click();
+    }
+  </script>
+</body>
+</html>
