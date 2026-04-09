@@ -49,6 +49,15 @@
 <script>
 const { createFFmpeg, fetchFile } = FFmpeg;
 const ffmpeg = createFFmpeg({ log:true });
+
+// Better progress handling
+ffmpeg.setLogger(({ message }) => {
+  const progressEl = document.getElementById('progress');
+  const match = message.match(/time=([0-9:.]+)/);
+  if (match) {
+    progressEl.style.width = Math.min(progressEl.offsetWidth + 5, 100) + '%';
+  }
+});
 let gifURL=null;
 let videoFile=null;
 
@@ -99,11 +108,10 @@ function updateEstimate(){
 });
 
 // Progress
-ffmpeg.setProgress(({ratio})=>{
-  document.getElementById('progress').style.width = (ratio*100)+'%';
-});
+// Removed unreliable setProgress; using logger-based progress instead
 
 async function convert(){
+  try {
   const status = document.getElementById('status');
   const start = startSlider.value;
   const duration = durationInput.value;
@@ -136,6 +144,10 @@ async function convert(){
   document.getElementById('output').src = gifURL;
   document.getElementById('downloadBtn').style.display='block';
   status.textContent='Done';
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status').textContent = 'Error: ' + err.message;
+  }
 }
 
 function downloadGIF(){
